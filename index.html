@@ -6,13 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Love Story</title>
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#fff5f5">
     <style>
         body {
             background-color: #fff5f5;
             font-family: 'Microsoft YaHei', sans-serif;
-            padding-bottom: 60px;
+            padding-bottom: 60px; /* 为底部按钮留空间 */
         }
         .header {
             background: linear-gradient(45deg, #ff9a9e, #fad0c4);
@@ -48,7 +49,7 @@
         .memory-text {
             color: #555;
             line-height: 1.6;
-            white-space: pre-line;
+            white-space: pre-line; /* 保留换行符 */
         }
         .add-memory-btn {
             background: linear-gradient(45deg, #ff9a9e, #fad0c4);
@@ -87,6 +88,7 @@
             padding: 50px 0;
             color: #888;
         }
+        /* 移动端优化 */
         @media (max-width: 768px) {
             .header {
                 padding: 1.5rem 0;
@@ -97,18 +99,6 @@
             .form-container {
                 padding: 1rem;
             }
-        }
-        .loading-spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -122,9 +112,8 @@
 
         <div class="container">
             <div class="text-center">
-                <button @click="toggleForm" class="btn add-memory-btn" :disabled="isSaving">
+                <button @click="toggleForm" class="btn add-memory-btn">
                     {{ showForm ? '取消添加' : '添加新回忆' }}
-                    <span v-if="isSaving" class="loading-spinner"></span>
                 </button>
             </div>
 
@@ -146,15 +135,14 @@
                     <label for="memoryImage" class="form-label">上传照片</label>
                     <input type="file" class="form-control" id="memoryImage" accept="image/*" @change="handleImageUpload">
                     <div v-if="currentMemory.image" class="mt-2">
-                        
+                        <img :src="currentMemory.image" class="img-thumbnail" style="max-height: 100px;">
                     </div>
                 </div>
                 <div class="d-flex justify-content-between">
-                    <button @click="saveMemory" class="btn btn-primary" :disabled="isSaving">
+                    <button @click="saveMemory" class="btn btn-primary">
                         {{ editingIndex === null ? '保存回忆' : '更新回忆' }}
-                        <span v-if="isSaving" class="loading-spinner"></span>
                     </button>
-                    <button v-if="editingIndex !== null" @click="cancelEdit" class="btn btn-secondary" :disabled="isSaving">取消编辑</button>
+                    <button v-if="editingIndex !== null" @click="cancelEdit" class="btn btn-secondary">取消编辑</button>
                 </div>
             </div>
 
@@ -166,7 +154,7 @@
             <div class="row">
                 <div class="col-md-6 col-lg-4" v-for="(memory, index) in memories" :key="index">
                     <div class="memory-card">
-                        
+                        <img v-if="memory.image" :src="memory.image" class="memory-img">
                         <div v-else class="bg-light d-flex align-items-center justify-content-center" style="height: 200px; border-radius: 10px;">
                             <span class="text-muted">暂无图片</span>
                         </div>
@@ -188,230 +176,97 @@
     </div>
 
     <script>
-        // 数据库配置
-        const DB_NAME = 'LoveMemoriesDB';
-        const DB_VERSION = 1;
-        const STORE_NAME = 'memories';
-        const STORAGE_KEY = 'couple-memories-text';
+        // 本地存储键名
+        const STORAGE_KEY = 'couple-memories';
         
-        // 初始化数据库
-        const initDB = async () => {
-            return await idb.openDB(DB_NAME, DB_VERSION, {
-                upgrade(db) {
-                    if (!db.objectStoreNames.contains(STORE_NAME)) {
-                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                    }
-                }
-            });
-        };
-
-        // 从本地存储加载回忆文本
-        const loadMemoriesText = () => {
+        // 从本地存储加载回忆
+        const loadMemories = () => {
             const saved = localStorage.getItem(STORAGE_KEY);
-            return saved ? JSON.parse(saved) : [];
+            if (saved) {
+                return JSON.parse(saved);
+            }
+            return [
+                {
+                    date: new Date().toISOString().split('T')[0],
+                    title: '欢迎使用爱情回忆录',
+                    description: '这是你们的第一个回忆，可以编辑或删除它，然后开始记录你们的爱情故事吧！',
+                    image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80'
+                }
+            ];
         };
 
         var vm = new Vue({
             el: '#app',
             data: {
-                db: null,
-                isSaving: false,
                 showForm: false,
                 editingIndex: null,
                 currentMemory: {
-                    id: null,
                     date: new Date().toISOString().split('T')[0],
                     title: '',
                     description: '',
                     image: null
                 },
-                memories: []
-            },
-            async created() {
-                this.db = await initDB();
-                await this.loadMemories();
-                
-                // 初始示例数据（如果没有数据）
-                if (this.memories.length === 0) {
-                    this.memories = [{
-                        id: 'sample-' + Date.now(),
-                        date: new Date().toISOString().split('T')[0],
-                        title: '欢迎使用爱情回忆录',
-                        description: '这是你们的第一个回忆，可以编辑或删除它，然后开始记录你们的爱情故事吧！',
-                        image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80'
-                    }];
-                    await this.saveMemories();
-                }
+                memories: loadMemories()
             },
             methods: {
-                // 加载所有回忆
-                async loadMemories() {
-                    try {
-                        // 加载文本数据
-                        const textData = loadMemoriesText();
-                        
-                        // 从IndexedDB加载图片数据
-                        const memoriesWithImages = [];
-                        for (const memory of textData) {
-                            if (memory.id) {
-                                const imageData = await this.db.get(STORE_NAME, memory.id);
-                                memoriesWithImages.push({
-                                    ...memory,
-                                    image: imageData?.image || null
-                                });
-                            }
-                        }
-                        
-                        this.memories = memoriesWithImages;
-                    } catch (error) {
-                        console.error('加载回忆失败:', error);
-                    }
-                },
-                
-                // 处理图片上传
-                async handleImageUpload(event) {
+                handleImageUpload(event) {
                     const file = event.target.files[0];
-                    if (!file) return;
-                    
-                    try {
-                        // 读取文件为DataURL
-                        this.currentMemory.image = await this.readFileAsDataURL(file);
-                    } catch (error) {
-                        console.error('图片上传失败:', error);
-                        alert('图片上传失败，请重试');
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.currentMemory.image = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
                     }
                 },
-                
-                // 读取文件为DataURL
-                readFileAsDataURL(file) {
-                    return new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
+                toggleForm() {
+                    this.showForm = !this.showForm;
+                    if (!this.showForm) {
+                        this.cancelEdit();
+                    }
                 },
-                
-                // 保存回忆
-                async saveMemory() {
+                saveMemory() {
                     if (!this.currentMemory.date || !this.currentMemory.title) {
                         alert('请至少填写日期和标题');
                         return;
                     }
                     
-                    this.isSaving = true;
-                    
-                    try {
-                        // 生成或使用现有ID
-                        const memoryId = this.currentMemory.id || 'memory-' + Date.now();
-                        
-                        // 准备要保存的数据
-                        const memoryToSave = {
-                            ...this.currentMemory,
-                            id: memoryId
-                        };
-                        
-                        // 保存图片到IndexedDB
-                        if (this.currentMemory.image) {
-                            await this.db.put(STORE_NAME, {
-                                id: memoryId,
-                                image: this.currentMemory.image
-                            });
-                        }
-                        
-                        // 更新内存中的回忆列表
-                        if (this.editingIndex === null) {
-                            this.memories.unshift(memoryToSave);
-                        } else {
-                            Vue.set(this.memories, this.editingIndex, memoryToSave);
-                        }
-                        
-                        // 保存文本数据到localStorage
-                        await this.saveMemories();
-                        
-                        // 重置表单
-                        this.resetForm();
-                        this.showForm = false;
-                    } catch (error) {
-                        console.error('保存回忆失败:', error);
-                        alert('保存失败，请重试');
-                    } finally {
-                        this.isSaving = false;
+                    if (this.editingIndex === null) {
+                        // 添加新回忆
+                        this.memories.unshift({...this.currentMemory});
+                    } else {
+                        // 更新现有回忆
+                        Vue.set(this.memories, this.editingIndex, {...this.currentMemory});
                     }
-                },
-                
-                // 保存文本数据到localStorage
-                async saveMemories() {
-                    const textData = this.memories.map(m => ({
-                        id: m.id,
-                        date: m.date,
-                        title: m.title,
-                        description: m.description
-                    }));
                     
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(textData));
+                    this.saveToLocalStorage();
+                    this.resetForm();
+                    this.showForm = false;
                 },
-                
-                // 编辑回忆
-                async editMemory(index) {
-                    const memory = this.memories[index];
+                editMemory(index) {
                     this.editingIndex = index;
-                    
-                    // 加载图片数据
-                    let imageData = null;
-                    if (memory.id) {
-                        imageData = await this.db.get(STORE_NAME, memory.id);
-                    }
-                    
-                    this.currentMemory = {
-                        id: memory.id,
-                        date: memory.date,
-                        title: memory.title,
-                        description: memory.description,
-                        image: imageData?.image || memory.image
-                    };
-                    
+                    this.currentMemory = {...this.memories[index]};
                     this.showForm = true;
                     window.scrollTo({top: 0, behavior: 'smooth'});
                 },
-                
-                // 删除回忆
-                async deleteMemory(index) {
-                    if (!confirm('确定要删除这段回忆吗？')) return;
-                    
-                    const memory = this.memories[index];
-                    try {
-                        // 从IndexedDB删除图片
-                        if (memory.id) {
-                            await this.db.delete(STORE_NAME, memory.id);
-                        }
-                        
-                        // 从内存中删除
+                deleteMemory(index) {
+                    if (confirm('确定要删除这段回忆吗？')) {
                         this.memories.splice(index, 1);
+                        this.saveToLocalStorage();
                         
-                        // 更新localStorage
-                        await this.saveMemories();
-                        
-                        // 如果正在编辑被删除的回忆，取消编辑
                         if (this.editingIndex === index) {
                             this.cancelEdit();
+                        } else if (this.editingIndex !== null && this.editingIndex > index) {
+                            this.editingIndex--;
                         }
-                    } catch (error) {
-                        console.error('删除回忆失败:', error);
-                        alert('删除失败，请重试');
                     }
                 },
-                
-                // 取消编辑
                 cancelEdit() {
                     this.editingIndex = null;
                     this.resetForm();
                 },
-                
-                // 重置表单
                 resetForm() {
                     this.currentMemory = {
-                        id: null,
                         date: new Date().toISOString().split('T')[0],
                         title: '',
                         description: '',
@@ -419,38 +274,39 @@
                     };
                     document.getElementById('memoryImage').value = '';
                 },
-                
-                // 格式化日期
+                saveToLocalStorage() {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.memories));
+                },
                 formatDate(dateString) {
                     const date = new Date(dateString);
                     const options = { year: 'numeric', month: 'long', day: 'numeric' };
                     return date.toLocaleDateString('zh-CN', options);
                 },
-                
-                // 滚动到顶部
                 scrollToTop() {
                     window.scrollTo({top: 0, behavior: 'smooth'});
-                },
-                
-                // 图片加载成功
-                imageLoaded(event) {
-                    // 可以在这里添加图片加载成功的处理
-                },
-                
-                // 图片加载失败
-                imageLoadError(index) {
-                    console.warn('图片加载失败:', this.memories[index].title);
-                    // 可以在这里设置默认图片或显示错误提示
-                },
-                
-                // 切换表单显示
-                toggleForm() {
-                    this.showForm = !this.showForm;
-                    if (!this.showForm) {
-                        this.cancelEdit();
-                    }
                 }
             }
+        });
+
+        // 添加到主屏幕提示（仅移动设备）
+        window.addEventListener('load', () => {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js').then(() => {
+                    console.log('ServiceWorker 注册成功');
+                }).catch(err => {
+                    console.log('ServiceWorker 注册失败: ', err);
+                });
+            }
+            
+            // 显示添加到主屏幕提示
+            let deferredPrompt;
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                
+                // 可以在这里添加一个按钮让用户选择添加到主屏幕
+                // 例如：显示一个"添加到主屏幕"的按钮
+            });
         });
     </script>
 </body>
