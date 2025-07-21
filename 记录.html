@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我们的爱情回忆录</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#fff5f5">
+    <style>
+        body {
+            background-color: #fff5f5;
+            font-family: 'Microsoft YaHei', sans-serif;
+            padding-bottom: 60px; /* 为底部按钮留空间 */
+        }
+        .header {
+            background: linear-gradient(45deg, #ff9a9e, #fad0c4);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+            margin-bottom: 2rem;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        .memory-card {
+            background-color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s;
+        }
+        .memory-card:hover {
+            transform: translateY(-5px);
+        }
+        .memory-img {
+            border-radius: 10px;
+            max-height: 300px;
+            object-fit: cover;
+            margin-bottom: 1rem;
+            width: 100%;
+        }
+        .memory-date {
+            color: #ff6b81;
+            font-weight: bold;
+        }
+        .memory-text {
+            color: #555;
+            line-height: 1.6;
+            white-space: pre-line; /* 保留换行符 */
+        }
+        .add-memory-btn {
+            background: linear-gradient(45deg, #ff9a9e, #fad0c4);
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            font-weight: bold;
+            margin-bottom: 2rem;
+            width: 100%;
+            max-width: 300px;
+        }
+        .form-container {
+            background-color: white;
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2rem;
+        }
+        .heart {
+            color: #ff6b81;
+            font-size: 1.5rem;
+            margin: 0 5px;
+        }
+        .fixed-bottom-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        .edit-btn {
+            margin-right: 5px;
+        }
+        .no-memories {
+            text-align: center;
+            padding: 50px 0;
+            color: #888;
+        }
+        /* 移动端优化 */
+        @media (max-width: 768px) {
+            .header {
+                padding: 1.5rem 0;
+            }
+            .memory-card {
+                padding: 1rem;
+            }
+            .form-container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="header">
+            <h1><span class="heart">❤</span> 我们的爱情回忆录 <span class="heart">❤</span></h1>
+            <p>记录我们在一起的每一个美好瞬间</p>
+        </div>
+
+        <div class="container">
+            <div class="text-center">
+                <button @click="toggleForm" class="btn add-memory-btn">
+                    {{ showForm ? '取消添加' : '添加新回忆' }}
+                </button>
+            </div>
+
+            <div v-if="showForm" class="form-container">
+                <h3 class="mb-4">{{ editingIndex === null ? '添加新回忆' : '编辑回忆' }}</h3>
+                <div class="mb-3">
+                    <label for="memoryDate" class="form-label">日期</label>
+                    <input type="date" class="form-control" id="memoryDate" v-model="currentMemory.date" required>
+                </div>
+                <div class="mb-3">
+                    <label for="memoryTitle" class="form-label">标题</label>
+                    <input type="text" class="form-control" id="memoryTitle" v-model="currentMemory.title" placeholder="给这段回忆起个名字" required>
+                </div>
+                <div class="mb-3">
+                    <label for="memoryDescription" class="form-label">描述</label>
+                    <textarea class="form-control" id="memoryDescription" rows="3" v-model="currentMemory.description" placeholder="写下你想说的话..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="memoryImage" class="form-label">上传照片</label>
+                    <input type="file" class="form-control" id="memoryImage" accept="image/*" @change="handleImageUpload">
+                    <div v-if="currentMemory.image" class="mt-2">
+                        <img :src="currentMemory.image" class="img-thumbnail" style="max-height: 100px;">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button @click="saveMemory" class="btn btn-primary">
+                        {{ editingIndex === null ? '保存回忆' : '更新回忆' }}
+                    </button>
+                    <button v-if="editingIndex !== null" @click="cancelEdit" class="btn btn-secondary">取消编辑</button>
+                </div>
+            </div>
+
+            <div v-if="memories.length === 0" class="no-memories">
+                <h4>还没有回忆记录</h4>
+                <p>点击上方按钮添加你们的第一个回忆吧！</p>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 col-lg-4" v-for="(memory, index) in memories" :key="index">
+                    <div class="memory-card">
+                        <img v-if="memory.image" :src="memory.image" class="memory-img">
+                        <div v-else class="bg-light d-flex align-items-center justify-content-center" style="height: 200px; border-radius: 10px;">
+                            <span class="text-muted">暂无图片</span>
+                        </div>
+                        <h4>{{ memory.title }}</h4>
+                        <p class="memory-date">{{ formatDate(memory.date) }}</p>
+                        <p class="memory-text">{{ memory.description }}</p>
+                        <div>
+                            <button @click="editMemory(index)" class="btn btn-sm btn-outline-primary edit-btn">编辑</button>
+                            <button @click="deleteMemory(index)" class="btn btn-sm btn-outline-danger">删除</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button @click="scrollToTop" class="btn btn-primary rounded-circle fixed-bottom-btn" style="width: 50px; height: 50px;">
+            ↑
+        </button>
+    </div>
+
+    <script>
+        // 本地存储键名
+        const STORAGE_KEY = 'couple-memories';
+        
+        // 从本地存储加载回忆
+        const loadMemories = () => {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                return JSON.parse(saved);
+            }
+            return [
+                {
+                    date: new Date().toISOString().split('T')[0],
+                    title: '欢迎使用爱情回忆录',
+                    description: '这是你们的第一个回忆，可以编辑或删除它，然后开始记录你们的爱情故事吧！',
+                    image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80'
+                }
+            ];
+        };
+
+        var vm = new Vue({
+            el: '#app',
+            data: {
+                showForm: false,
+                editingIndex: null,
+                currentMemory: {
+                    date: new Date().toISOString().split('T')[0],
+                    title: '',
+                    description: '',
+                    image: null
+                },
+                memories: loadMemories()
+            },
+            methods: {
+                handleImageUpload(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.currentMemory.image = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                },
+                toggleForm() {
+                    this.showForm = !this.showForm;
+                    if (!this.showForm) {
+                        this.cancelEdit();
+                    }
+                },
+                saveMemory() {
+                    if (!this.currentMemory.date || !this.currentMemory.title) {
+                        alert('请至少填写日期和标题');
+                        return;
+                    }
+                    
+                    if (this.editingIndex === null) {
+                        // 添加新回忆
+                        this.memories.unshift({...this.currentMemory});
+                    } else {
+                        // 更新现有回忆
+                        Vue.set(this.memories, this.editingIndex, {...this.currentMemory});
+                    }
+                    
+                    this.saveToLocalStorage();
+                    this.resetForm();
+                    this.showForm = false;
+                },
+                editMemory(index) {
+                    this.editingIndex = index;
+                    this.currentMemory = {...this.memories[index]};
+                    this.showForm = true;
+                    window.scrollTo({top: 0, behavior: 'smooth'});
+                },
+                deleteMemory(index) {
+                    if (confirm('确定要删除这段回忆吗？')) {
+                        this.memories.splice(index, 1);
+                        this.saveToLocalStorage();
+                        
+                        if (this.editingIndex === index) {
+                            this.cancelEdit();
+                        } else if (this.editingIndex !== null && this.editingIndex > index) {
+                            this.editingIndex--;
+                        }
+                    }
+                },
+                cancelEdit() {
+                    this.editingIndex = null;
+                    this.resetForm();
+                },
+                resetForm() {
+                    this.currentMemory = {
+                        date: new Date().toISOString().split('T')[0],
+                        title: '',
+                        description: '',
+                        image: null
+                    };
+                    document.getElementById('memoryImage').value = '';
+                },
+                saveToLocalStorage() {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.memories));
+                },
+                formatDate(dateString) {
+                    const date = new Date(dateString);
+                    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                    return date.toLocaleDateString('zh-CN', options);
+                },
+                scrollToTop() {
+                    window.scrollTo({top: 0, behavior: 'smooth'});
+                }
+            }
+        });
+
+        // 添加到主屏幕提示（仅移动设备）
+        window.addEventListener('load', () => {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js').then(() => {
+                    console.log('ServiceWorker 注册成功');
+                }).catch(err => {
+                    console.log('ServiceWorker 注册失败: ', err);
+                });
+            }
+            
+            // 显示添加到主屏幕提示
+            let deferredPrompt;
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                
+                // 可以在这里添加一个按钮让用户选择添加到主屏幕
+                // 例如：显示一个"添加到主屏幕"的按钮
+            });
+        });
+    </script>
+</body>
+
+</html>
